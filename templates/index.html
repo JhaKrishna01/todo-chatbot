@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List & Chatbot</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+        .container { display: flex; max-width: 900px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #ccc; }
+        .todo-section, .chat-section { flex: 1; padding: 32px; }
+        .todo-section { border-right: 1px solid #eee; }
+        h2 { margin-top: 0; }
+        ul { list-style: none; padding: 0; }
+        li { background: #e3e3e3; margin: 8px 0; padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        button { background: #007bff; color: #fff; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+        button.delete { background: #dc3545; }
+        .chat-box { height: 300px; overflow-y: auto; background: #f9f9f9; border-radius: 4px; padding: 12px; margin-bottom: 12px; border: 1px solid #eee; }
+        .chat-message { margin: 8px 0; }
+        .chat-message.user { text-align: right; color: #007bff; }
+        .chat-message.bot { text-align: left; color: #333; }
+        .chat-input { width: 80%; padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        .chat-send { padding: 8px 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="todo-section">
+            <h2>To-Do List</h2>
+            <form id="todo-form">
+                <input type="text" id="todo-input" placeholder="Add a new task..." required>
+                <button type="submit">Add</button>
+            </form>
+            <ul id="todo-list"></ul>
+        </div>
+        <div class="chat-section">
+            <h2>Chatbot</h2>
+            <div class="chat-box" id="chat-box"></div>
+            <form id="chat-form">
+                <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." required>
+                <button type="submit" class="chat-send">Send</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        // To-Do List logic
+        async function fetchTodos() {
+            const res = await fetch('/api/todos');
+            const data = await res.json();
+            const list = document.getElementById('todo-list');
+            list.innerHTML = '';
+            data.todos.forEach(task => {
+                const li = document.createElement('li');
+                li.textContent = task;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Delete';
+                delBtn.className = 'delete';
+                delBtn.onclick = async () => {
+                    await fetch('/api/todos', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task })
+                    });
+                    fetchTodos();
+                };
+                li.appendChild(delBtn);
+                list.appendChild(li);
+            });
+        }
+        document.getElementById('todo-form').onsubmit = async e => {
+            e.preventDefault();
+            const input = document.getElementById('todo-input');
+            const task = input.value.trim();
+            if (task) {
+                await fetch('/api/todos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task })
+                });
+                input.value = '';
+                fetchTodos();
+            }
+        };
+        fetchTodos();
+
+        // Chatbot logic
+        const chatBox = document.getElementById('chat-box');
+        function appendMessage(text, sender) {
+            const div = document.createElement('div');
+            div.className = 'chat-message ' + sender;
+            div.textContent = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        document.getElementById('chat-form').onsubmit = async e => {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (message) {
+                appendMessage(message, 'user');
+                input.value = '';
+                const res = await fetch('/api/chatbot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+                const data = await res.json();
+                appendMessage(data.response, 'bot');
+                // If chatbot suggests to add/remove/list, trigger those actions
+                if (message.toLowerCase().startsWith('add ')) {
+                    const task = message.slice(4);
+                    await fetch('/api/todos', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task })
+                    });
+                    fetchTodos();
+                } else if (message.toLowerCase().startsWith('remove ')) {
+                    const task = message.slice(7);
+                    await fetch('/api/todos', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ task })
+                    });
+                    fetchTodos();
+                } else if (message.toLowerCase() === 'list') {
+                    fetchTodos();
+                }
+            }
+        };
+    </script>
+</body>
+</html> 
