@@ -28,6 +28,7 @@
             <h2>To-Do List</h2>
             <form id="todo-form">
                 <input type="text" id="todo-input" placeholder="Add a new task..." required>
+                <input type="datetime-local" id="due-date-input" placeholder="Due date (optional)">
                 <button type="submit">Add</button>
             </form>
             <ul id="todo-list"></ul>
@@ -48,9 +49,64 @@
             const data = await res.json();
             const list = document.getElementById('todo-list');
             list.innerHTML = '';
-            data.todos.forEach(task => {
+            const now = new Date();
+            data.todos.forEach(todo => {
                 const li = document.createElement('li');
-                li.textContent = task;
+                // Create checkbox for completion
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = todo.completed;
+                checkbox.onchange = async () => {
+                    await fetch('/api/todos/complete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: todo.id, completed: checkbox.checked })
+                    });
+                    fetchTodos();
+                };
+                li.appendChild(checkbox);
+                // Task text
+                const span = document.createElement('span');
+                span.textContent = todo.task;
+                if (todo.completed) {
+                    span.style.textDecoration = 'line-through';
+                    span.style.opacity = '0.6';
+                }
+                li.appendChild(span);
+                // Due date display
+                if (todo.due_date) {
+                    const due = new Date(todo.due_date);
+                    const dueSpan = document.createElement('span');
+                    dueSpan.style.marginLeft = '10px';
+                    dueSpan.style.fontSize = '0.9em';
+                    dueSpan.textContent = '(Due: ' + due.toLocaleString() + ')';
+                    // Highlight overdue or soon tasks
+                    if (!todo.completed && due < now) {
+                        dueSpan.style.color = '#dc3545'; // red for overdue
+                    } else if (!todo.completed && due - now < 24*60*60*1000 && due > now) {
+                        dueSpan.style.color = '#ffc107'; // yellow for due soon
+                    } else {
+                        dueSpan.style.color = '#888';
+                    }
+                    li.appendChild(dueSpan);
+                }
+                // Edit button
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.style.marginRight = '8px';
+                editBtn.onclick = async () => {
+                    const newTask = prompt('Edit task:', todo.task);
+                    let newDueDate = todo.due_date ? todo.due_date.slice(0, 16) : '';
+                    newDueDate = prompt('Edit due date (YYYY-MM-DDTHH:MM, blank to clear):', newDueDate) || '';
+                    await fetch('/api/todos/edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: todo.id, task: newTask, due_date: newDueDate })
+                    });
+                    fetchTodos();
+                };
+                li.appendChild(editBtn);
+                // Delete button
                 const delBtn = document.createElement('button');
                 delBtn.textContent = 'Delete';
                 delBtn.className = 'delete';
@@ -58,7 +114,7 @@
                     await fetch('/api/todos', {
                         method: 'DELETE',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ task })
+                        body: JSON.stringify({ task: todo.task })
                     });
                     fetchTodos();
                 };
@@ -69,14 +125,17 @@
         document.getElementById('todo-form').onsubmit = async e => {
             e.preventDefault();
             const input = document.getElementById('todo-input');
+            const dueInput = document.getElementById('due-date-input');
             const task = input.value.trim();
+            const due_date = dueInput.value ? dueInput.value : null;
             if (task) {
                 await fetch('/api/todos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task })
+                    body: JSON.stringify({ task, due_date })
                 });
                 input.value = '';
+                dueInput.value = '';
                 fetchTodos();
             }
         };
